@@ -1,35 +1,30 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Form, HTTPException
+from fastapi.responses import FileResponse
 from pathlib import Path
 import subprocess
 import tempfile
-import os
 
 router = APIRouter(prefix="/deg", tags=["DEG"])
 
-class DegParams(BaseModel):
-    csv_path: str
-    fc_input: str
-    pval_input: str
-
 @router.post("/")
-async def run_deg(params: DegParams):
-    try:
-        csv_file = Path(params.csv_path).resolve()
-        if not csv_file.exists():
-            raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
+async def run_deg(
+    csv_path: str = Form(...),
+    fc_input: str = Form(...),
+    pval_input: str = Form(...)
+):
+    csv_file = Path(csv_path).resolve()
+    if not csv_file.exists():
+        raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
 
-        result_dir = csv_file.parent / "Deg"
-        result_dir.mkdir(parents=True, exist_ok=True)
+    # 결과 디렉토리 설정
+    result_dir = csv_file.parent / "Deg"
+    result_dir.mkdir(parents=True, exist_ok=True)
 
-        # thresholds parsing
-        fc_thresholds = [float(x.strip()) for x in params.fc_input.split(",") if x.strip()]
-        pval_thresholds = [float(x.strip()) for x in params.pval_input.split(",") if x.strip()]
+    # R 스크립트 임시 파일 생성
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
+        r_script_path = Path(tmp_r.name)
 
-        # R 스크립트 생성
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
-            r_script_path = Path(tmp_r.name)
-            tmp_r.write(f"""
+        tmp_r.write(f"""
 save_filtered_results <- function(csv_path, fc_thresholds, pval_thresholds, result_dir) {{
   gene_data <- read.csv(csv_path, stringsAsFactors = FALSE)
   if (!dir.exists(result_dir)) dir.create(result_dir, recursive = TRUE)
@@ -38,7 +33,7 @@ save_filtered_results <- function(csv_path, fc_thresholds, pval_thresholds, resu
 
   for (fc_cut in fc_thresholds) {{
     for (p_cut in pval_thresholds) {{
-      subset_genes <- gene_data[abs(gene_data$foldchange) >= fc_cut & 
+      subset_genes <- gene_data[abs(gene_data$foldchange) >= fc_cut &
                                 gene_data$pvalue <= p_cut, , drop = FALSE]
 
       combo_name <- paste0("FC", fc_cut, "_p", p_cut)
@@ -61,24 +56,40 @@ save_filtered_results <- function(csv_path, fc_thresholds, pval_thresholds, resu
 }}
 
 csv_path <- "{csv_file}"
-fc_thresholds <- c({", ".join(map(str, fc_thresholds))})
-pval_thresholds <- c({", ".join(map(str, pval_thresholds))})
+fc_thresholds <- c({", ".join(fc_input.split(","))})
+pval_thresholds <- c({", ".join(pval_input.split(","))})
 result_dir <- "{result_dir}"
 
 save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
 """)
 
-        result = subprocess.run(
-            ["Rscript", str(r_script_path)],
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
+    # subprocess 명령어 실행
+    cmd = ["Rscript", str(r_script_path)]
+
+    try:
+        result = subprocess.run(cmd, text=True, capture_output=True)
 
         if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=result.stderr)
+            print("❌ Rscript stderr:")
+            print(result.stderr)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Rscript execution failed:\n{result.stderr}"
+            )
 
-        return {"message": "DEG filtering completed successfully!", "stdout": result.stdout}
+        combo_csv = result_dir / "combo_names.csv"
+        if not combo_csv.exists():
+            raise HTTPException(
+                status_code=500,
+                detail="Rscript finished but no combo_names.csv was generated."
+            )
 
+        return {
+            "message": "✅ DEG filtering completed successfully!",
+            "stdout": result.stdout
+        }
+
+    except subprocess.SubprocessError as e:
+        raise HTTPException(status_code=500, detail=f"Subprocess error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
