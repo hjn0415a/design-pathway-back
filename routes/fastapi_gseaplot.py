@@ -5,7 +5,7 @@ import subprocess
 import os
 import tempfile
 
-router = APIRouter(prefix="/run-gseaplot", tags=["GSEA Plot"])
+router = APIRouter(prefix="/gseaplot", tags=["GSEA Plot"])
 
 class GSEAPayload(BaseModel):
     input_dir: str

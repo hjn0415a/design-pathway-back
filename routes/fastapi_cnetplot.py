@@ -1,4 +1,3 @@
-# fastapi_cnetplot.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import subprocess
@@ -7,7 +6,8 @@ import os
 import pandas as pd
 import shutil
 
-router = APIRouter(prefix="/cnetplot", tags=["Cnetplot"])
+# ✅ prefix를 /api로 시작하도록 변경
+router = APIRouter(prefix="/api/cnetplot", tags=["Cnetplot"])
 
 class CnetRequest(BaseModel):
     result_root: str
@@ -89,7 +89,7 @@ make_cnet_from_rds_by_combo("{req.result_root}", "{req.figure_root}", combo_name
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=result.stderr)
 
-        # ZIP 결과 생성
+        # ✅ ZIP 파일 생성
         zip_path = os.path.join(req.figure_root, "Cnetplots_combos.zip")
         if os.path.exists(zip_path):
             os.remove(zip_path)

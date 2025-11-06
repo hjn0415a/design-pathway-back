@@ -1,7 +1,7 @@
 import os
 import subprocess
 import tempfile
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/enrichplot", tags=["Enrichplot"])
@@ -15,17 +15,20 @@ class EnrichplotParams(BaseModel):
     plot_width: float
     plot_height: float
 
-@router.post("")
+
+@router.post("/")
 def run_enrichplot(params: EnrichplotParams):
     """Run GO enrichment analysis using R script."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
-        r_script_path = tmp_r.name
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
+            r_script_path = tmp_r.name
 
-        tmp_r.write(f"""
+            tmp_r.write(f"""
 library(clusterProfiler)
 library({params.org_db})
 library(enrichplot)
 library(ggplot2)
+library(DOSE)
 
 run_enrich_genedi_min <- function(result_root,
                                   output_root,
@@ -105,20 +108,20 @@ run_enrich_genedi_min(
 )
 """)
 
-    try:
         result = subprocess.run(
             ["Rscript", r_script_path],
             capture_output=True,
             text=True,
-            encoding="utf-8",
-            timeout=600
+            encoding="utf-8"
         )
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "returncode": result.returncode
-        }
-    except subprocess.TimeoutExpired:
-        return {"error": "R script execution timed out"}
+
+        if result.returncode == 0:
+            return {"message": "GO enrichment analysis completed successfully!", "stdout": result.stdout}
+        else:
+            raise HTTPException(status_code=500, detail=result.stderr)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        os.remove(r_script_path)
+        if os.path.exists(r_script_path):
+            os.remove(r_script_path)

@@ -1,23 +1,26 @@
-# fastapi_ridgeplot.py
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 import subprocess
 import tempfile
 import os
+import json
 
 router = APIRouter(prefix="/ridgeplot", tags=["Ridgeplot"])
 
 @router.post("/")
-async def run_ridgeplot(
-    input_file: str = Form(...),
-    output_dir: str = Form(...),
-    width: float = Form(...),
-    height: float = Form(...)
-):
+async def run_ridgeplot(request_data: dict):
     try:
+        input_file = request_data.get("input_file")
+        output_dir = request_data.get("output_dir")
+        width = request_data.get("width")
+        height = request_data.get("height")
+
+        if not all([input_file, output_dir, width, height]):
+            raise HTTPException(status_code=400, detail="Missing required parameters.")
+
         os.makedirs(output_dir, exist_ok=True)
 
-        # 임시 R 스크립트 파일 생성
+        # ✅ 임시 R 스크립트 파일 생성
         with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
             r_script_path = tmp_r.name
             tmp_r.write(f"""
@@ -79,7 +82,7 @@ for (ont in c("BP","CC","MF")) {{
 }}
 """)
 
-        # Rscript 실행
+        # ✅ Rscript 실행
         result = subprocess.run(
             ["Rscript", r_script_path],
             capture_output=True,

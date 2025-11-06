@@ -1,4 +1,3 @@
-# fastapi_gsego.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import subprocess
@@ -32,7 +31,7 @@ out_dir <- "{params.out_dir}"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 df <- read.csv(file_path, check.names = FALSE, stringsAsFactors = FALSE)
-stopifnot("Geneid" %in% names(df))
+if (!"Geneid" %in% names(df)) stop("Missing 'Geneid' column in input file")
 
 num_cols <- names(df)[vapply(df, is.numeric, logical(1))]
 cand <- setdiff(num_cols, c("pvalue","padj","FDR","qvalue","P.Value","p_val","p_val_adj",
@@ -41,7 +40,7 @@ pattA <- "(^|[^A-Za-z0-9])(A|GroupA|ctrl|control|con|vehicle|veh|untreat|baselin
 pattB <- "(^|[^A-Za-z0-9])(B|GroupB|case|treated|tx|ko|mut|disease|stim|post|drug)($|[^A-Za-z0-9])"
 a_cols <- cand[grepl(pattA, cand, ignore.case = TRUE, perl = TRUE)]
 b_cols <- cand[grepl(pattB, cand, ignore.case = TRUE, perl = TRUE)]
-stopifnot(length(a_cols) > 1, length(b_cols) > 1)
+if (length(a_cols) < 2 || length(b_cols) < 2) stop("Not enough A/B group columns detected")
 
 expr_mat <- as.matrix(df[, c(a_cols, b_cols)])
 rownames(expr_mat) <- df$Geneid
@@ -66,9 +65,9 @@ for (ont in c("BP","CC","MF")) {{
   saveRDS(gse, file = file.path(out_dir, paste0("gse_", ont, ".rds")))
   if (is.null(gse) || is.null(gse@result) || nrow(gse@result) == 0) {{
     write.csv(data.frame(), file = file.path(out_dir, paste0("gse_", ont, ".csv")), row.names = FALSE)
-    next
+  }} else {{
+    write.csv(as.data.frame(gse), file = file.path(out_dir, paste0("gse_", ont, ".csv")), row.names = FALSE)
   }}
-  write.csv(as.data.frame(gse), file = file.path(out_dir, paste0("gse_", ont, ".csv")), row.names = FALSE)
 }}
 """)
 

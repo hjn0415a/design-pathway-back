@@ -1,6 +1,6 @@
-# fastapi_deg.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from pathlib import Path
 import subprocess
 import tempfile
 import os
@@ -13,11 +13,14 @@ class DegParams(BaseModel):
     pval_input: str
 
 @router.post("/")
-def run_deg(params: DegParams):
+async def run_deg(params: DegParams):
     try:
-        csv_path = params.csv_path
-        result_dir = os.path.join(os.path.dirname(csv_path), "Deg")
-        os.makedirs(result_dir, exist_ok=True)
+        csv_file = Path(params.csv_path).resolve()
+        if not csv_file.exists():
+            raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
+
+        result_dir = csv_file.parent / "Deg"
+        result_dir.mkdir(parents=True, exist_ok=True)
 
         # thresholds parsing
         fc_thresholds = [float(x.strip()) for x in params.fc_input.split(",") if x.strip()]
@@ -25,7 +28,7 @@ def run_deg(params: DegParams):
 
         # R 스크립트 생성
         with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
-            r_script_path = tmp_r.name
+            r_script_path = Path(tmp_r.name)
             tmp_r.write(f"""
 save_filtered_results <- function(csv_path, fc_thresholds, pval_thresholds, result_dir) {{
   gene_data <- read.csv(csv_path, stringsAsFactors = FALSE)
@@ -53,32 +56,29 @@ save_filtered_results <- function(csv_path, fc_thresholds, pval_thresholds, resu
     }}
   }}
 
-  saveRDS(combo_names, file.path(result_dir, "combo_names.rds"))
   write.csv(data.frame(combo = combo_names),
             file = file.path(result_dir, "combo_names.csv"), row.names = FALSE)
-
-  invisible(combo_names)
 }}
 
-csv_path <- "{csv_path}"
+csv_path <- "{csv_file}"
 fc_thresholds <- c({", ".join(map(str, fc_thresholds))})
 pval_thresholds <- c({", ".join(map(str, pval_thresholds))})
 result_dir <- "{result_dir}"
 
-combo_names <- save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
+save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
 """)
 
         result = subprocess.run(
-            ["Rscript", r_script_path],
+            ["Rscript", str(r_script_path)],
             capture_output=True,
             text=True,
             encoding="utf-8"
         )
 
-        if result.returncode == 0:
-            return {"message": "DEG filtering completed successfully!", "stdout": result.stdout}
-        else:
+        if result.returncode != 0:
             raise HTTPException(status_code=500, detail=result.stderr)
+
+        return {"message": "DEG filtering completed successfully!", "stdout": result.stdout}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
