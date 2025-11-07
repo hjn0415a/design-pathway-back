@@ -13,7 +13,6 @@ class VolcanoRequest(BaseModel):
     fc_cutoff: float
     pval_cutoff: float
 
-
 @router.post("/")
 def run_volcano(req: VolcanoRequest):
     """기본 Volcano Plot"""

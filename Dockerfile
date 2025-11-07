@@ -24,7 +24,7 @@ COPY . /app/
 # Install R packages required for heatmap & omics
 RUN Rscript -e "if(!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager', repos='https://cran.r-project.org')" && \
     Rscript -e "BiocManager::install(c('pheatmap','EnhancedVolcano','clusterProfiler','org.Hs.eg.db','org.Mm.eg.db','enrichplot','limma','pathview','RCy3'), update=TRUE, ask=FALSE, dependencies=TRUE)" && \
-    Rscript -e "install.packages(c('svglite','ggplot2','readr','cowplot','dplyr'), repos='https://cran.r-project.org')"
+    Rscript -e "install.packages(c('svglite','ggplot2','readr','cowplot','dplyr', 'factoextra', 'ggrepel'), repos='https://cran.r-project.org')"
 
 # Expose FastAPI port
 EXPOSE 8000
