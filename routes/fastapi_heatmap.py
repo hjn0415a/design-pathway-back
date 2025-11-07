@@ -17,7 +17,7 @@ async def run_heatmap(
         raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
 
     # 출력 파일 경로
-    output_path = csv_file.parent / "heatmap2.svg"
+    output_path = csv_file.parent / "heatmap.svg"
 
     # R 스크립트 경로 (예: backend/scripts/run_heatmap.R)
     r_script_path = Path(__file__).resolve().parent.parent / "rcode" / "run_heatmap.R"
