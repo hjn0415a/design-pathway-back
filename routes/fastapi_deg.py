@@ -3,6 +3,8 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import subprocess
 import tempfile
+import zipfile
+import os
 
 router = APIRouter(prefix="/deg", tags=["DEG"])
 
@@ -17,7 +19,7 @@ async def run_deg(
         raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
 
     # 결과 디렉토리 설정
-    result_dir = csv_file.parent / "Deg"
+    result_dir = csv_file.parent.parent / "Deg"
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # R 스크립트 임시 파일 생성
@@ -76,18 +78,25 @@ save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
                 status_code=500,
                 detail=f"Rscript execution failed:\n{result.stderr}"
             )
+        
+        zip_path = result_dir/"deg.zip"
+        if zip_path.exists():
+            zip_path.unlink()
 
-        combo_csv = result_dir / "combo_names.csv"
-        if not combo_csv.exists():
-            raise HTTPException(
-                status_code=500,
-                detail="Rscript finished but no combo_names.csv was generated."
-            )
 
-        return {
-            "message": "✅ DEG filtering completed successfully!",
-            "stdout": result.stdout
-        }
+
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for file in result_dir.rglob("*"):
+                if file.is_file():
+                    zipf.write(file, file.relative_to(result_dir))
+        os.sync() 
+
+ 
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename="deg.zip")
 
     except subprocess.SubprocessError as e:
         raise HTTPException(status_code=500, detail=f"Subprocess error: {e}")
