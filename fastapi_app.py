@@ -9,6 +9,7 @@ from routes import (
     fastapi_cnetplot,
     fastapi_emapplot,
     fastapi_gsego,
+    fastapi_gseaplot,
     fastapi_ridgeplot,
     fastapi_pathway_gene,
     fastapi_upload,
@@ -37,7 +38,8 @@ app.include_router(fastapi_deg.router, prefix="/api", tags=["DEG"])
 app.include_router(fastapi_enrichplot.router, prefix="/api", tags=["Enrichplot"])
 app.include_router(fastapi_cnetplot.router, prefix="/api", tags=["Cnetplot"])
 app.include_router(fastapi_emapplot.router, prefix="/api", tags=["Emapplot"])
-app.include_router(fastapi_gsego.router, prefix="/api", tags=["GSEGO"])
+app.include_router(fastapi_gsego.router, prefix="/api", tags=["Gsego"])
+app.include_router(fastapi_gseaplot.router, prefix="/api", tags=["Gseaplot"])
 app.include_router(fastapi_ridgeplot.router, prefix="/api", tags=["Ridgeplot"])
 app.include_router(fastapi_pathway_gene.router, prefix="/api", tags=["Pathway Gene"])
 app.include_router(fastapi_upload.router, prefix="/api", tags=["Upload CSV"])
