@@ -84,13 +84,15 @@ save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
             zip_path.unlink()
 
 
+        with tempfile.TemporaryDirectory() as tmpdir:   
+            zip_path = Path(tmpdir) / "deg.zip"
 
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for file in result_dir.rglob("*"):
+                    if file.is_file() and file != zip_path:  # 자기 자신 제외
+                        arcname = file.relative_to(result_dir)
+                        zipf.write(file, arcname)
 
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for file in result_dir.rglob("*"):
-                if file.is_file():
-                    zipf.write(file, file.relative_to(result_dir))
-        os.sync() 
 
  
         return FileResponse(
