@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import zipfile
 import os
+import shutil
 
 router = APIRouter(prefix="/deg", tags=["DEG"])
 
@@ -19,7 +20,13 @@ async def run_deg(
         raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
 
     # 결과 디렉토리 설정
+
     result_dir = csv_file.parent.parent / "Deg"
+    if result_dir.exists():
+        shutil.rmtree(result_dir)
+
+
+
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # R 스크립트 임시 파일 생성
@@ -79,19 +86,13 @@ save_filtered_results(csv_path, fc_thresholds, pval_thresholds, result_dir)
                 detail=f"Rscript execution failed:\n{result.stderr}"
             )
         
-        zip_path = result_dir/"deg.zip"
-        if zip_path.exists():
-            zip_path.unlink()
+        zip_path = result_dir / "deg.zip"  # 안전한 위치에서 생성
 
-
-        with tempfile.TemporaryDirectory() as tmpdir:   
-            zip_path = Path(tmpdir) / "deg.zip"
-
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for file in result_dir.rglob("*"):
-                    if file.is_file() and file != zip_path:  # 자기 자신 제외
-                        arcname = file.relative_to(result_dir)
-                        zipf.write(file, arcname)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for file in result_dir.rglob("*"):
+                if file.is_file() and file != zip_path:
+                    arcname = file.relative_to(result_dir)
+                    zipf.write(file, arcname)
 
 
  
