@@ -1,25 +1,31 @@
-# fastapi_app/fastapi_heatmap.py
 import os
 import subprocess
 import tempfile
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from pathlib import Path
 
 router = APIRouter(prefix="/volcano", tags=["R Analysis"])
 
 class VolcanoRequest(BaseModel):
-    excel_path: str
-    output_svg: str
+    csv_path: str
     fc_cutoff: float
     pval_cutoff: float
 
 @router.post("/")
 def run_volcano(req: VolcanoRequest):
     """기본 Volcano Plot"""
+    csv_path = Path(req.csv_path).resolve()
+    if not csv_path.exists():
+        raise HTTPException(status_code=400, detail=f"{csv_path} does not exist.")
+
+    output_svg = csv_path.with_name(csv_path.stem + "_volcano.svg")
+
     r_code = f"""
 library(readr)
 library(ggplot2)
-data <- read_csv('{req.excel_path}')
+data <- read_csv('{req.csv_path}')
 data <- data[!is.na(data$foldchange) & data$foldchange > 0, ]
 data$log2FC <- log2(data$foldchange)
 fc_cutoff <- {req.fc_cutoff}
@@ -36,35 +42,56 @@ volcano_plot <- ggplot(data, aes(x=log2FC, y=-log10(pvalue), color=group)) +
     geom_hline(yintercept=p_cutoff, linetype="dashed", color="gray") +
     labs(title="Volcano Plot", x="log2 Fold Change", y="-log10 pvalue") +
     theme_minimal()
-ggsave(filename='{req.output_svg}', plot=volcano_plot, width=8, height=6, dpi=300, device='svg')
+ggsave(filename='{output_svg}', plot=volcano_plot, width=8, height=6, dpi=300, device='svg')
 """
+
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
             tmp_r.write(r_code)
             tmp_r_path = tmp_r.name
-        subprocess.run(["Rscript", tmp_r_path], check=True)
+
+        result = subprocess.run(["Rscript", tmp_r_path], text=True, capture_output=True)
         os.remove(tmp_r_path)
-        if os.path.exists(req.output_svg):
-            return {"status": "success", "output": req.output_svg}
-        else:
-            raise HTTPException(status_code=500, detail="SVG not created")
-    except subprocess.CalledProcessError as e:
+
+        if result.returncode != 0:
+            print("❌ Rscript stderr:")
+            print(result.stderr)
+            raise HTTPException(status_code=500, detail=f"Rscript failed:\n{result.stderr}")
+
+        if not output_svg.exists():
+            raise HTTPException(status_code=500, detail="SVG file was not created.")
+
+        return FileResponse(
+            path=output_svg,
+            media_type="image/svg+xml",
+            filename=output_svg.name
+        )
+
+    except subprocess.SubprocessError as e:
+        raise HTTPException(status_code=500, detail=f"Subprocess error: {e}")
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/enhanced")
 def run_enhanced_volcano(req: VolcanoRequest):
     """Enhanced Volcano Plot"""
+    csv_path = Path(req.csv_path).resolve()
+    if not csv_path.exists():
+        raise HTTPException(status_code=400, detail=f"{csv_path} does not exist.")
+
+    output_svg = csv_path.with_name(csv_path.stem + "_enhanced_volcano.svg")
+
     r_code = f"""
 library(readr)
 library(EnhancedVolcano)
-data <- read_csv('{req.excel_path}')
+data <- read_csv('{req.csv_path}')
 data <- data[!is.na(data$foldchange) & data$foldchange > 0, ]
 data$log2FC <- log2(data$foldchange)
 res <- data.frame(log2FoldChange=data$log2FC, pvalue=data$pvalue)
 rownames(res) <- data$Gene_Symbol
 res <- res[!is.na(res$log2FoldChange) & is.finite(res$log2FoldChange), ]
-svg('{req.output_svg}', width=10, height=8)
+svg('{output_svg}', width=10, height=8)
 EnhancedVolcano(res,
     lab=NA,
     x='log2FoldChange',
@@ -77,15 +104,30 @@ EnhancedVolcano(res,
     labSize=2.5)
 dev.off()
 """
+
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
             tmp_r.write(r_code)
             tmp_r_path = tmp_r.name
-        subprocess.run(["Rscript", tmp_r_path], check=True)
+
+        result = subprocess.run(["Rscript", tmp_r_path], text=True, capture_output=True)
         os.remove(tmp_r_path)
-        if os.path.exists(req.output_svg):
-            return {"status": "success", "output": req.output_svg}
-        else:
-            raise HTTPException(status_code=500, detail="SVG not created")
-    except subprocess.CalledProcessError as e:
+
+        if result.returncode != 0:
+            print("❌ Rscript stderr:")
+            print(result.stderr)
+            raise HTTPException(status_code=500, detail=f"Rscript failed:\n{result.stderr}")
+
+        if not output_svg.exists():
+            raise HTTPException(status_code=500, detail="SVG file was not created.")
+
+        return FileResponse(
+            path=output_svg,
+            media_type="image/svg+xml",
+            filename=output_svg.name
+        )
+
+    except subprocess.SubprocessError as e:
+        raise HTTPException(status_code=500, detail=f"Subprocess error: {e}")
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

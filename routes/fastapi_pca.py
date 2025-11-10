@@ -1,92 +1,70 @@
-# backend/routes/fastapi_pca.py
-import os
-import tempfile
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 import subprocess
+from pathlib import Path
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-router = APIRouter(
-    prefix="/pca",
-    tags=["PCA"]
-)
+router = APIRouter(prefix="/pca", tags=["PCA"])
 
+# ✅ JSON 본문으로 받을 데이터 모델 정의
 class PCARequest(BaseModel):
     csv_path: str
-    output_svg: str
-    width: float = 8.0
-    height: float = 6.0
-    pointshape: int = 16
-    pointsize: float = 3.5
-    text_size: float = 4.0
+    width: float
+    height: float
+    pointshape: int
+    pointsize: float
+    text_size: float
 
-@router.post("/", response_class=None)  # SVG 파일을 바이너리로 반환
-def run_pca(request: PCARequest):
-    csv_path = request.csv_path
-    output_svg = request.output_svg
-    width = request.width
-    height = request.height
-    pointshape = request.pointshape
-    pointsize = request.pointsize
-    text_size = request.text_size
+@router.post("/")
+async def run_pca(req: PCARequest):
+    csv_file = Path(req.csv_path).resolve()
+    if not csv_file.exists():
+        raise HTTPException(status_code=400, detail=f"{csv_file} does not exist.")
 
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=400, detail=f"CSV file not found: {csv_path}")
+    # 출력 파일 경로 (CSV와 동일 폴더에 pca.svg 저장)
+    output_path = csv_file.parent / "pca.svg"
 
-    # 임시 R 스크립트 생성
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False, encoding="utf-8") as tmp_r:
-        r_script_path = tmp_r.name
-        tmp_r.write(f"""
-library(readr)
-library(factoextra)
-library(ggrepel)
-library(svglite)
+    # R 스크립트 경로 (예: backend/rcode/run_pca.R)
+    r_script_path = Path(__file__).resolve().parent.parent / "rcode" / "run_pca.R"
 
-dat <- as.data.frame(read_csv("{csv_path}"))
+    # subprocess 명령어 구성
+    cmd = [
+        "Rscript",
+        str(r_script_path),
+        str(csv_file),
+        str(req.width),
+        str(req.height),
+        str(req.pointshape),
+        str(req.pointsize),
+        str(req.text_size),
+        str(output_path)
+    ]
 
-# 샘플 열 추출 (Geneid, foldchange, pvalue 제외)
-sample_cols <- grep("(^Group)|(_[0-9]+$)", names(dat), value = TRUE)
-X <- t(as.matrix(dat[, sample_cols, drop = FALSE]))
-rownames(X) <- sample_cols
-
-Xz <- scale(X, center = TRUE, scale = TRUE)
-Xz <- Xz[, colSums(is.na(Xz)) == 0, drop = FALSE]
-
-pca_res <- prcomp(Xz, center = FALSE, scale. = FALSE)
-rownames(pca_res$x) <- rownames(X)
-sample_groups <- factor(sub("(_[0-9]+$)|([0-9]+$)", "", rownames(pca_res$x)))
-df <- data.frame(PC1 = pca_res$x[,1], PC2 = pca_res$x[,2],
-                 sample = rownames(pca_res$x), group = sample_groups)
-
-svglite("{output_svg}", width = {width}, height = {height})
-
-p <- fviz_pca_ind(
-  pca_res,
-  geom.ind   = "point",
-  col.ind    = sample_groups,
-  pointshape = {pointshape},
-  pointsize  = {pointsize},
-  mean.point = FALSE,
-  addEllipses= FALSE
-) +
-  geom_text_repel(data = df, aes(PC1, PC2, label = sample, color = group),
-                  size = {text_size}, show.legend = FALSE)
-
-print(p)
-dev.off()
-""")
-
-    # Rscript 실행
     try:
-        subprocess.run(["Rscript", r_script_path], check=True, text=True)
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"R script execution failed: {e}")
-    finally:
-        os.remove(r_script_path)
+        result = subprocess.run(cmd, text=True, capture_output=True)
 
-    # 생성된 SVG 반환
-    if not os.path.exists(output_svg):
-        raise HTTPException(status_code=500, detail=f"PCA SVG not generated: {output_svg}")
+        if result.returncode != 0:
+            print("❌ Rscript stderr:")
+            print(result.stderr)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Rscript execution failed:\n{result.stderr}"
+            )
 
-    with open(output_svg, "rb") as f:
-        content = f.read()
-    return content
+        if not output_path.exists():
+            raise HTTPException(
+                status_code=500,
+                detail="Rscript finished but no SVG file was generated."
+            )
+
+        # PCA 결과 SVG 파일 반환
+        return FileResponse(
+            path=output_path,
+            media_type="image/svg+xml",
+            filename="pca.svg"
+        )
+
+    except subprocess.SubprocessError as e:
+        raise HTTPException(status_code=500, detail=f"Subprocess error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
