@@ -86,7 +86,13 @@ run_enrich_genedi_min <- function(result_root,
   }
 }
 
-combo_names <- readRDS(file.path(result_root, "combo_names.rds"))
+combo_csv_path <- file.path(result_root, "combo_names.csv")
+
+if (!file.exists(combo_csv_path)) {
+  stop(paste("Combo CSV file not found:", combo_csv_path))
+}
+
+combo_names <- read.csv(combo_csv_path, stringsAsFactors = FALSE)[["combo"]]
 
 run_enrich_genedi_min(
   result_root = result_root,
