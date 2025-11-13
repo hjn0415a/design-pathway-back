@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) < 7) {
+if (length(args) < 6) {
   stop("Usage: Rscript run_emapplot.R <result_root> <figure_root> <combo_vec> <show_n> <width> <height>")
 }
 
 result_root <- args[[1]]
 figure_root <- args[[2]]
-combo_vec   <- eval(parse(text = args[[3]]))
+combo_vec   <- strsplit(args[[3]], ",")[[1]]   # ✅ 수정된 부분
 show_n      <- as.numeric(args[[4]])
 width       <- as.numeric(args[[5]])
 height      <- as.numeric(args[[6]])

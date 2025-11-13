@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) < 7) {
+if (length(args) < 6) {
   stop("Usage: Rscript run_cnetplot.R <result_root> <figure_root> <combo_vec> <showCategory> <width> <height>")
 }
 
 result_root <- args[[1]]
 figure_root <- args[[2]]
-combo_vec   <- eval(parse(text = args[[3]]))
+combo_vec   <- unlist(strsplit(args[[3]], ","))  # ✅ 콤마 기준 분리
 show_n      <- as.numeric(args[[4]])
 width       <- as.numeric(args[[5]])
 height      <- as.numeric(args[[6]])

@@ -10,7 +10,7 @@ suppressPackageStartupMessages({
 # --- 명령줄 인자 받기 ---
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) < 8) {
+if (length(args) < 7) {
   stop("Usage: Rscript run_pca.R <csv_path> <width> <height> <pointshape> <pointsize> <text_size> <output_svg>")
 }
 
