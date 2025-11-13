@@ -13,7 +13,7 @@ router = APIRouter(prefix="/cnetplot", tags=["Cnetplot"])
 
 
 class CnetRequest(BaseModel):
-    result_root: str       # DEG 결과 폴더
+    enrich_root: str       # DEG 결과 폴더
     output_root: str       # Cnetplot 결과 저장 폴더
     combo_root: str        # combo_names.csv 위치
     fc_threshold: float
@@ -66,7 +66,7 @@ def run_cnetplot(req: CnetRequest, background_tasks: BackgroundTasks):
     cmd = [
         "Rscript",
         str(r_script_path),
-        str(req.result_root),
+        str(req.enrich_root),
         str(output_dir),
         combo_str,  # ✅ R에서 strsplit으로 처리할 예정
         str(req.showCategory),
